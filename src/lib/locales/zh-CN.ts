@@ -41,6 +41,8 @@ export default {
         previewTableScroll: '宽表格横向滚动',
         previewTableBreakoutHint: '可以伸进两侧页边',
         previewTableScrollHint: '开：滚动细看　关：压缩粗看',
+        previewHardBreaks: '每个换行都换行显示',
+        previewHardBreaksHint: '关：折行合并成段落，同 GitHub',
         showTabs: '显示标签栏',
         restoreStateOnReopen: '重新打开时恢复标签页',
         closeWindowWithLastTab: '关闭最后一个标签时关闭窗口',

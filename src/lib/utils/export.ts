@@ -59,6 +59,8 @@ export interface ExportContext {
 	 */
 	contentWidth: number | null;
 	appearance: ExportAppearance;
+	/** `settings.previewHardBreaks`: the export breaks lines where the preview does. */
+	hardBreaks: boolean;
 	/**
 	 * Mermaid's theme name for the appearance this export is being made in.
 	 * Unlike the PDF route — paper is always white, so that one forces a light
@@ -369,7 +371,7 @@ async function buildExportArticle(
 	{ embedImages = true }: { embedImages?: boolean } = {},
 ): Promise<{ root: HTMLElement; embeddedImages: number; missingImages: number }> {
 	const body = getMarkdownBodyWithoutFrontMatter(ctx.rawContent);
-	const rendered = (await invoke('render_markdown', { content: body })) as string;
+	const rendered = (await invoke('render_markdown', { content: body, hardBreaks: ctx.hardBreaks })) as string;
 	// The export used to write `rendered` to disk untouched. comrak runs with
 	// `unsafe_ = true`, so a script the preview had filtered out was still live
 	// in the exported file — and the exported file has no CSP of the app's, gets

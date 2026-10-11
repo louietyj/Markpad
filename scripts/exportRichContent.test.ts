@@ -185,6 +185,7 @@ async function runExport(
 		rawContent: '# Notes\n',
 		tabTitle: 'Notes',
 		tabPath: '/documents/notes.md',
+		hardBreaks: true,
 		mermaidTheme: options.mermaidTheme ?? 'neutral',
 		libraries: fakeLibraries(record) as any,
 		// The width the preview was reading at, which the export follows (#467).

@@ -1186,6 +1186,14 @@
 									<span class="toggle-slider"></span>
 								</label>
 							</div>
+
+							<div class="setting-item">
+								<label for="preview-hard-breaks" class="has-hint">{t('settings.previewHardBreaks', settings.language)}<span class="setting-hint">{t('settings.previewHardBreaksHint', settings.language)}</span></label>
+								<label class="toggle">
+									<input id="preview-hard-breaks" type="checkbox" bind:checked={settings.previewHardBreaks} />
+									<span class="toggle-slider"></span>
+								</label>
+							</div>
 						</div>
 					{:else if activeCategory === 'appearance'}
 						<div class="settings-group">

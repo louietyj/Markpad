@@ -1,7 +1,7 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { assignFoldKey, isFolded } from "./foldState.js";
 import { isOffHostUncPath } from "./markdownLinks.js";
-import { parseSourceposLineRange } from "./previewAnchor.js";
+import { parseSourceposLineRange, type LineRange } from "./previewAnchor.js";
 import { carrySourcepos } from "./richContent.js";
 
 const alertIcons: Record<string, string> = {
@@ -371,6 +371,10 @@ function findDisplayMathEnd(text: string, start: number): number {
 
 function findInlineMathEnd(text: string, start: number): number {
 	for (let index = start; index < text.length; index += 1) {
+		// With soft breaks a paragraph is one text node, but the backend masks
+		// math one line at a time (`math_scan_segments`), so a span may not
+		// reach across a newline here either.
+		if (text[index] === "\n") return -1;
 		if (text[index] !== "$") continue;
 		// Escaped dollars are math content, not closing delimiters.
 		if (text[index - 1] === "\\") continue;
@@ -725,6 +729,74 @@ function processSoftLineAnchors(root: Element, doc: Document) {
 			br.parentNode?.insertBefore(anchor, follows);
 		}
 	}
+
+	for (const block of Array.from(root.querySelectorAll("p[data-sourcepos], li[data-sourcepos]"))) {
+		const range = parseSourceposLineRange(block.getAttribute("data-sourcepos"));
+		if (range && range.endLine - range.startLine + 1 >= LINE_ANCHOR_MIN_SPAN) {
+			anchorSoftBreaks(block, range, doc);
+		}
+	}
+}
+
+/** What may sit inside a line of prose without ending the run of lines. */
+const INLINE_TAGS = /^(A|ABBR|B|BR|CODE|DEL|EM|I|IMG|INPUT|INS|KBD|MARK|S|SMALL|SPAN|STRONG|SUB|SUP|U|WBR)$/;
+
+/**
+ * `processSoftLineAnchors` for a soft break, a `\n` inside a text node: the
+ * anchor goes after the newline, its line counted from the block's first.
+ *
+ * The count resyncs on each inline element with its own range, and stops at
+ * math: a rewritten formula's newlines are no longer the source's, and
+ * splitting inside `\[…\]` would break what KaTeX looks for. With hard breaks
+ * every newline already follows an anchored `<br>`, so this adds nothing.
+ */
+function anchorSoftBreaks(block: Element, range: LineRange, doc: Document) {
+	let line: number | null = range.startLine;
+
+	const visit = (parent: Node): boolean => {
+		for (let child = parent.firstChild; child; child = child.nextSibling) {
+			if (child.nodeType === Node.ELEMENT_NODE) {
+				const element = child as Element;
+				if (!INLINE_TAGS.test(element.tagName)) return false;
+				if (element.hasAttribute("data-math")) {
+					line = null;
+					continue;
+				}
+				const own = parseSourceposLineRange(element.getAttribute("data-sourcepos"));
+				if (own) line = own.startLine;
+				if (!visit(element)) return false;
+				if (own) line = own.endLine;
+				continue;
+			}
+			if (child.nodeType !== Node.TEXT_NODE || line === null) continue;
+
+			const value = child.nodeValue ?? "";
+			if (value.includes("\\[")) {
+				line = null;
+				continue;
+			}
+			const newline = value.indexOf("\n");
+			if (newline === -1) continue;
+
+			line += 1;
+			const rest = value.slice(newline + 1);
+			if (line > range.endLine || !rest.trim()) continue;
+
+			// The newline stays in front of the anchor, where it is the space
+			// between the two lines' words.
+			child.nodeValue = value.slice(0, newline + 1);
+			const anchor = doc.createElement("span");
+			anchor.className = "source-line-anchor";
+			anchor.setAttribute("data-sourcepos", `${line}:1-${line}:1`);
+			anchor.setAttribute("aria-hidden", "true");
+			const restNode = doc.createTextNode(rest);
+			parent.insertBefore(restNode, child.nextSibling);
+			parent.insertBefore(anchor, restNode);
+		}
+		return true;
+	};
+
+	visit(block);
 }
 
 export function processMarkdownHtml(
@@ -850,7 +922,9 @@ export function processMarkdownHtml(
 		let first = bq.firstChild;
 		while (first && first.nodeType === 3 && isBlank(first.textContent)) first = first.nextSibling;
 		const lead = first?.nodeType === 1 && (first as Element).tagName === "P" ? first.firstChild : null;
-		const matchResult = lead?.nodeType === 3 ? lead.nodeValue?.match(/^\s*\[!([a-zA-Z0-9_\-]+)\]([+-]?)\s*/i) : null;
+		// Not `\s*`: with soft breaks the newline ending the title line is in
+		// this text node, and eating it would make the body the title.
+		const matchResult = lead?.nodeType === 3 ? lead.nodeValue?.match(/^\s*\[!([a-zA-Z0-9_\-]+)\]([+-]?)[^\S\n]*/i) : null;
 		const textNode = matchResult ? (lead as Text) : null;
 
 		if (textNode && matchResult) {
@@ -867,6 +941,15 @@ export function processMarkdownHtml(
 					const br = currentLineNode;
 					currentLineNode = br.nextSibling;
 					br.parentElement?.removeChild(br);
+					break;
+				}
+				const newline = currentLineNode.nodeType === 3 ? currentLineNode.nodeValue!.indexOf("\n") : -1;
+				if (newline !== -1) {
+					// A soft break ends the title; the rest stays as the body.
+					const value = currentLineNode.nodeValue!;
+					currentLineNode.nodeValue = value.slice(0, newline);
+					currentLineNode.parentNode!.insertBefore(doc.createTextNode(value.slice(newline + 1)), currentLineNode.nextSibling);
+					titleNodes.push(currentLineNode);
 					break;
 				}
 				const next: Node | null = currentLineNode.nextSibling;

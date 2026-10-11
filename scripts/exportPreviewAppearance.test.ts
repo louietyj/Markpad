@@ -85,6 +85,7 @@ test('a PDF is printed in the preview appearance', async () => {
 		rawContent: 'body\n',
 		tabTitle: 'Notes',
 		tabPath: '/documents/notes.md',
+		hardBreaks: true,
 		mermaidTheme: 'neutral',
 		libraries: {
 			hljs: { getLanguage: () => null },

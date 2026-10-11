@@ -322,6 +322,7 @@ async function exportedFile(contentWidth: number | null): Promise<string> {
 		rawContent: '# Notes\n',
 		tabTitle: 'Notes',
 		tabPath: '/documents/notes.md',
+		hardBreaks: true,
 		mermaidTheme: 'neutral',
 		libraries: {
 			hljs: { getLanguage: () => null },

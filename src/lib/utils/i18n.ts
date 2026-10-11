@@ -118,6 +118,8 @@ const en: Translation = {
         previewTableScroll: 'Scroll Wide Tables',
         previewTableBreakoutHint: 'Spreads into the side margins',
         previewTableScrollHint: 'On: scroll. Off: squeeze to fit',
+        previewHardBreaks: 'Every Newline Is a Line Break',
+        previewHardBreaksHint: 'Off: wrapped lines join, as on GitHub',
         showTabs: 'Show Tab Bar',
         restoreStateOnReopen: 'Reopen Previous Tabs',
         closeWindowWithLastTab: 'Close Window with Last Tab',

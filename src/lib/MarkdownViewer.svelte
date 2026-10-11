@@ -1129,9 +1129,21 @@ import { createDocumentSession, type LoadMarkdownOptions } from './sessions/docu
 	// be active when the promise resolves.
 	async function renderMarkdownPreview(raw: string, filePath: string, folds: Set<string>) {
 		const body = getMarkdownBodyWithoutFrontMatter(raw);
-		const html = (await invoke('render_markdown', { content: body })) as string;
+		const html = (await invoke('render_markdown', { content: body, hardBreaks: settings.previewHardBreaks })) as string;
 		return processMarkdownHtml(html, filePath, folds);
 	}
+
+	// This setting changes the HTML, not its styling, so every tab re-renders —
+	// including background ones, whose cached `tab.content` a switch shows.
+	let renderedHardBreaks = settings.previewHardBreaks;
+	$effect(() => {
+		const hardBreaks = settings.previewHardBreaks;
+		if (hardBreaks === renderedHardBreaks) return;
+		renderedHardBreaks = hardBreaks;
+		for (const tab of untrack(() => tabManager.tabs)) {
+			if (tab.rawContent) renderTabPreviewFromRaw(tab).catch(console.error);
+		}
+	});
 
 	async function renderTabPreviewFromRaw(tab: Tab) {
 		const processed = await renderMarkdownPreview(tab.rawContent, tab.path, tab.foldOverrides);
@@ -2694,6 +2706,7 @@ import { createDocumentSession, type LoadMarkdownOptions } from './sessions/docu
 			// so the exported file is read at the measure it was written at.
 			contentWidth: previewContentWidth,
 			appearance: previewAppearance,
+			hardBreaks: settings.previewHardBreaks,
 			frontMatterTitle: t('frontMatter.properties', settings.language),
 		});
 		if (result?.missingImages) {
@@ -2743,6 +2756,7 @@ import { createDocumentSession, type LoadMarkdownOptions } from './sessions/docu
 				mermaidTheme: currentMermaidTheme(),
 					contentWidth: previewContentWidth,
 				appearance: previewAppearance,
+				hardBreaks: settings.previewHardBreaks,
 				frontMatterTitle: t('frontMatter.properties', settings.language),
 				osType: settings.osType,
 				printRoot: printRootEl,

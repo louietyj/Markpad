@@ -50,6 +50,8 @@ export default {
         previewTableScroll: '寬表格橫向捲動',
         previewTableBreakoutHint: '可以伸進兩側頁邊',
         previewTableScrollHint: '開：捲動細看　關：壓縮粗看',
+        previewHardBreaks: '每個換行都換行顯示',
+        previewHardBreaksHint: '關：折行合併成段落，同 GitHub',
         showTabs: '顯示分頁欄',
         restoreStateOnReopen: '重新開啟時還原狀態',
         closeWindowWithLastTab: '關閉最後一個分頁時關閉視窗',

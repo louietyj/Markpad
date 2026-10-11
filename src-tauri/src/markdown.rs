@@ -829,12 +829,12 @@ struct MaskedSpan {
 /// Byte ranges of `content` that may hold math: one entry per line, with the
 /// code regions cut out.
 ///
-/// The split mirrors what the frontend can see. `convert_markdown` renders
-/// with `hardbreaks`, so every source line becomes its own DOM text node, and
-/// `processInlineMath` skips `code`/`pre` subtrees entirely — a `$` on the far
-/// side of a line break or of an inline code span is in a different text node
-/// and can never pair. Scanning the raw buffer the same way is what keeps the
-/// two ends agreeing, and it is also what stops a single `$$` inside a fenced
+/// The split mirrors what the frontend can see. With `hardbreaks` every source
+/// line becomes its own DOM text node; without it `findInlineMathEnd` stops at
+/// the `\n` of a soft break. And `processInlineMath` skips `code`/`pre`
+/// subtrees entirely — so a `$` on the far side of a line break or of an
+/// inline code span can never pair. Scanning the raw buffer the same way is
+/// what keeps the two ends agreeing, and it is also what stops a single `$$` inside a fenced
 /// block from flipping the delimiter parity of the whole document.
 ///
 /// Autolinked URLs are cut out the same way. comrak links
@@ -1413,7 +1413,11 @@ fn escape_html_text(text: &str) -> String {
 ///
 /// Not a Tauri command: the registered entry point is `render_markdown`, and
 /// this is what it calls underneath.
-pub(crate) fn convert_markdown(content: &str) -> String {
+///
+/// `hard_breaks` off renders a newline inside a paragraph as a CommonMark soft
+/// break; an explicit hard break (two trailing spaces, a trailing `\`) is a
+/// `<br>` either way.
+pub(crate) fn convert_markdown_with(content: &str, hard_breaks: bool) -> String {
     // The buffer this command was called with, captured before anything runs
     // and never rebound. What `annotate_task_checkboxes` is handed at the end
     // has to be this rather than the parameter name: a new step written as a
@@ -1427,10 +1431,17 @@ pub(crate) fn convert_markdown(content: &str) -> String {
     let processed_links = process_wikilinks(&processed_embeds);
     let masked_math = mask_math_spans(&processed_links);
 
-    let options = markdown_options();
+    let mut options = markdown_options();
+    options.render.hardbreaks = hard_breaks;
 
     let html = markdown_to_html(&masked_math.text, &options);
     annotate_task_checkboxes(restore_math_spans(&html, &masked_math), raw_buffer)
+}
+
+/// `convert_markdown_with` at the default, hard breaks on.
+#[cfg(test)]
+pub(crate) fn convert_markdown(content: &str) -> String {
+    convert_markdown_with(content, true)
 }
 
 /// Marks the rendered task checkboxes the frontend is allowed to toggle.
@@ -2350,6 +2361,41 @@ pub(crate) mod tests {
         // Markdown.
         let html = convert_markdown("Costs $5 today\nand *this* is emphasis $\n");
         assert!(html.contains("<em"), "got: {html}");
+    }
+
+    #[test]
+    fn soft_breaks_render_a_newline_as_a_newline_not_a_br() {
+        let html = convert_markdown_with("one\ntwo\n", false);
+        assert!(!html.contains("<br"), "got: {html}");
+        assert!(html.contains("one\ntwo"), "got: {html}");
+
+        let html = convert_markdown_with("one\ntwo\n", true);
+        assert!(html.contains("<br"), "got: {html}");
+    }
+
+    #[test]
+    fn soft_breaks_keep_explicit_hard_breaks() {
+        for markdown in ["one  \ntwo\n", "one\\\ntwo\n"] {
+            let html = convert_markdown_with(markdown, false);
+            assert!(
+                html.contains("<br"),
+                "{markdown:?} lost its hard break: {html}"
+            );
+        }
+    }
+
+    #[test]
+    fn soft_breaks_still_mask_math_one_line_at_a_time() {
+        // A soft break puts the whole paragraph in one text node, but the
+        // frontend's inline pairing still stops at a newline, so the backend
+        // must not pair across one either.
+        let html = convert_markdown_with("Costs $5 today\nand *this* is emphasis $\n", false);
+        assert!(html.contains("<em"), "got: {html}");
+        let html = convert_markdown_with("Let $a_1$ and\n$b_2$ be.\n", false);
+        assert!(
+            html.contains("$a_1$") && html.contains("$b_2$"),
+            "got: {html}"
+        );
     }
 
     #[test]
@@ -3340,12 +3386,12 @@ pub(crate) mod tests {
     fn convert_markdown_body() -> String {
         let source = include_str!("markdown.rs").replace("\r\n", "\n");
         let needle = format!(
-            "\npub(crate) fn {}(content: &str) -> String {{",
-            "convert_markdown"
+            "\npub(crate) fn {}(content: &str, hard_breaks: bool) -> String {{",
+            "convert_markdown_with"
         );
         let start = source
             .find(&needle)
-            .expect("convert_markdown must keep its `&str -> String` signature");
+            .expect("convert_markdown_with must keep its signature");
         let rest = &source[start + needle.len()..];
         rest[..rest
             .find("\n}\n")
@@ -3413,12 +3459,12 @@ pub(crate) mod tests {
         // tree happens to store it.
         let source = include_str!("markdown.rs").replace("\r\n", "\n");
         let needle = format!(
-            "\npub(crate) fn {}(content: &str) -> String {{",
-            "convert_markdown"
+            "\npub(crate) fn {}(content: &str, hard_breaks: bool) -> String {{",
+            "convert_markdown_with"
         );
         let start = source
             .find(&needle)
-            .expect("convert_markdown must keep its `&str -> String` signature");
+            .expect("convert_markdown_with must keep its signature");
         let rest = &source[start + needle.len()..];
         let body = &rest[..rest
             .find("\n}\n")
